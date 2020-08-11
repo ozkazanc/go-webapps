@@ -1,1 +1,1 @@
-# gowebapps
+# go-webapps
