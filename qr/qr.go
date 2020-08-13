@@ -3,8 +3,8 @@ package main
 import (
     "flag"
     "html/template"
-    "log"
     "net/http"
+    "log"
 )
 
 // -addr :PORT
@@ -14,6 +14,7 @@ var templ = template.Must(template.New("qr").Parse(templateStr))
 
 func main() {
     flag.Parse()
+    log.Println("Establishing a QR  Generator server at port", *addr)
     http.Handle("/", http.HandlerFunc(QR))
     err := http.ListenAndServe(*addr, nil)
     if err != nil {
