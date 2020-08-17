@@ -5,6 +5,8 @@ curl -i -X POST localhost:8080/books -d '{"title":"the hobbit","author":"jrr tol
 
 GOTEST_ADMIN_PASSWD=secret go run books.go
 curl localhost:8080/admin -u admin:secret
+
+curl localhost:8080/books/delete/{id}
 */
 
 package main
@@ -45,11 +47,14 @@ func main() {
 
 	adminPortal := newAdminPortal()
 	fmt.Println("Establishing a book database server at port", PORT)
+	
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, "/books", http.StatusFound) })
 	http.HandleFunc("/books", allBooks)
 	http.HandleFunc("/books/", singleBook)
+	http.HandleFunc("/books/delete/", deleteBook)
 	http.HandleFunc("/admin", adminPortal.handler)
+	
 	err := http.ListenAndServe(PORT, nil)
 	if err != nil {
 		log.Fatal("HTTP ListenAndServe Error:", err)
@@ -68,6 +73,8 @@ func singleBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+
+	fmt.Printf("path[2]: %s, len(path): %d\n", path[2], len(path))
 	if path[2] == "random" {
 		getRandomBook(w, r)	
 	} else {
@@ -93,6 +100,7 @@ func getRandomBook(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusFound)
 
 }
+
 
 func getBookById(w http.ResponseWriter, r *http.Request, id string) {
 	book, ok := library[id]
@@ -175,10 +183,35 @@ func postNewBook(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func deleteBook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write([]byte("Method not allowed!"))
+	}
+
+	path := strings.Split(r.URL.Path, "/")
+	if len(path) != 4 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	
+	id := path[3]
+	_, ok := library[id]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	delete(library, id)
+
+	w.Header().Add("Location", "/books")
+	w.WriteHeader(http.StatusFound)
+}
+
 func newAdminPortal() *AdminPortal {
 	password := os.Getenv("GOTEST_ADMIN_PASSWD")
 	if password == "" {
-		log.Fatal("GOTEST_ADMIN_PASSWD not set.")
+		log.Fatal("GOTEST_ADMIN_PASSWD is not set.")
 	}
 
 	return &AdminPortal{password: password}
@@ -194,5 +227,3 @@ func (a AdminPortal) handler(w http.ResponseWriter, r *http.Request) {
 
 	w.Write([]byte("<html><h2>Super secret admin page!!!</h2></html>"))
 }
-
-
