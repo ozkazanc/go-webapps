@@ -1,3 +1,8 @@
+/* 
+curl localhost:8080/books | jq
+curl -i -X POST localhost:8080/books -d '{"title":"the hobbit","author":"jrr tolkien","year":"1937", "genre":"fantasy"}' -H "Content-Type: application/json"
+*/
+
 package main
 
 import (
@@ -7,12 +12,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+	"strings"
+	"math/rand"
 )
 
-/* 
-curl localhost:8080/books | jq
-curl -i -X POST localhost:8080/books -d '{"title":"hobbit","author":"jrrtolkien","year":"1937", "genre":"fantasy"}' -H "Content-Type: application/json"
-*/
 type Book struct {
 	Id	string `json:"id"`
 	Title 	string `json:"title"`
@@ -34,27 +37,84 @@ func main() {
 	fmt.Println("Establishing a book database server at port", PORT)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, "/books", http.StatusFound) })
-	http.HandleFunc("/books", books)
-	//http.HandleFunc("/books/", books)
+	http.HandleFunc("/books", allBooks)
+	http.HandleFunc("/books/", singleBook)
 	err := http.ListenAndServe(PORT, nil)
 	if err != nil {
 		log.Fatal("HTTP ListenAndServe Error:", err)
 	}
 }
 
-func books(w http.ResponseWriter, r *http.Request) {
+func singleBook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write([]byte("Method not allowed!"))
+	}
+
+	path := strings.Split(r.URL.Path, "/")
+	if len(path) != 3 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	
+	if path[2] == "random" {
+		getRandomBook(w, r)	
+	} else {
+		getBookById(w, r, path[2])
+	}
+}
+
+func getRandomBook(w http.ResponseWriter, r *http.Request) {
+	ids := make([]string, len(library))
+	i := 0
+	for id, _ := range library {
+		ids[i] = id
+		i++
+	}
+
+	if i == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	} 
+	
+	rand.Seed(time.Now().UnixNano())
+	w.Header().Add("Location", fmt.Sprintf("/books/%s", ids[rand.Intn(i)]))
+	w.WriteHeader(http.StatusFound)
+
+}
+
+func getBookById(w http.ResponseWriter, r *http.Request, id string) {
+	book, ok := library[id]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	jsonBook, err := json.Marshal(book)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.Header().Add("content-type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonBook)
+}
+
+func allBooks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 		case "GET":
-			get(w, r)
+			getLibrary(w, r)
 		case "POST":
-			post(w, r)
+			postNewBook(w, r)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			w.Write([]byte("Method not allowed!"))
 	}
 }
 
-func get(w http.ResponseWriter, r *http.Request) {
+func getLibrary(w http.ResponseWriter, r *http.Request) {
 	lib := make([]Book, len(library))
 	i := 0	
 	for _, v := range library {
@@ -74,7 +134,7 @@ func get(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonLib)
 }
 
-func post(w http.ResponseWriter, r *http.Request) {
+func postNewBook(w http.ResponseWriter, r *http.Request) {
 	ct := r.Header.Get("content-type")
 	if ct != "application/json" {
 		w.WriteHeader(http.StatusUnsupportedMediaType)
