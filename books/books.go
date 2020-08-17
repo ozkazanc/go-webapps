@@ -1,6 +1,10 @@
 /* 
 curl localhost:8080/books | jq
+
 curl -i -X POST localhost:8080/books -d '{"title":"the hobbit","author":"jrr tolkien","year":"1937", "genre":"fantasy"}' -H "Content-Type: application/json"
+
+GOTEST_ADMIN_PASSWD=secret go run books.go
+curl localhost:8080/admin -u admin:secret
 */
 
 package main
@@ -14,6 +18,7 @@ import (
 	"time"
 	"strings"
 	"math/rand"
+	"os"
 )
 
 type Book struct {
@@ -22,6 +27,10 @@ type Book struct {
 	Author	string `json:"author"`
 	Year	string `json:"year"`
 	Genre	string `json:"genre"`
+}
+
+type AdminPortal struct {
+	password string
 }
 
 var library map[string]Book = make(map[string]Book)
@@ -34,11 +43,13 @@ func main() {
 	library[b1.Id] = b1
 	library[b2.Id] = b2
 
+	adminPortal := newAdminPortal()
 	fmt.Println("Establishing a book database server at port", PORT)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, "/books", http.StatusFound) })
 	http.HandleFunc("/books", allBooks)
 	http.HandleFunc("/books/", singleBook)
+	http.HandleFunc("/admin", adminPortal.handler)
 	err := http.ListenAndServe(PORT, nil)
 	if err != nil {
 		log.Fatal("HTTP ListenAndServe Error:", err)
@@ -164,8 +175,24 @@ func postNewBook(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func newAdminPortal() *AdminPortal {
+	password := os.Getenv("GOTEST_ADMIN_PASSWD")
+	if password == "" {
+		log.Fatal("GOTEST_ADMIN_PASSWD not set.")
+	}
 
+	return &AdminPortal{password: password}
+}
 
+func (a AdminPortal) handler(w http.ResponseWriter, r *http.Request) {
+	user, passwd, ok := r.BasicAuth()
+	if !ok || user != "admin" || passwd != a.password {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("401 - Unauthorized\n"))
+		return
+	}
 
+	w.Write([]byte("<html><h2>Super secret admin page!!!</h2></html>"))
+}
 
 
